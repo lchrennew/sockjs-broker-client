@@ -1,10 +1,11 @@
 // https://tools.ietf.org/html/rfc8441
 
-import { EventEmitter2 } from 'eventemitter2';
+import EventEmitter from 'eventemitter2';
 import SockJS from 'sockjs-client';
 import { WebSocketMultiplex } from './multiplex.js';
+import { getApi, json, POST } from "es-fetch-api";
 
-class Client extends EventEmitter2 {
+export default class Client extends EventEmitter.EventEmitter2 {
     id
     server;
     channels;
@@ -114,6 +115,11 @@ class Client extends EventEmitter2 {
         const exists = this.#fallbacks[topic]
         exists && this.off('connected', exists)
         delete this.#fallbacks[topic]
+    }
+
+    async publish(topic, message) {
+        const api = getApi(this.server)
+        await api(`publish/${encodeURIComponent(topic)}`, POST, json(message)).catch(() => null)
     }
 }
 
