@@ -1,9 +1,10 @@
 {
   "name": "sockjs-broker-client",
-  "version": "1.0.4",
+  "version": "1.0.5",
   "main": "client.js",
   "license": "MIT",
   "author": "Chun Li",
+  "type": "module",
   "dependencies": {
     "es-fetch-api": "^1.0.1",
     "eventemitter2": "^6.4.5",
