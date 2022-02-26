@@ -2,13 +2,15 @@
   "name": "sockjs-broker-client-demo",
   "private": true,
   "version": "0.0.0",
+  "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
-    "sockjs-broker-client": "^1.0.9",
+    "es-object-id": "^1.0.0",
+    "sockjs-broker-client": "^1.0.11",
     "vue": "^3.2.31"
   },
   "devDependencies": {

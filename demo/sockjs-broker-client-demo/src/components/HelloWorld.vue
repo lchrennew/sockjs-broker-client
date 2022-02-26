@@ -1,12 +1,13 @@
 <script setup>
 import Client from "sockjs-broker-client";
+import { generateObjectID } from "es-object-id";
 
-const client = new Client('http://localhost:9999/queues');
-const sub = () => client.subscribe('topic1', ({ data }) => console.log(data)),
-    unsub = () => client.unsubscribe('topic1'),
-    pub = () => client.send('topic1', 'hello,world'),
-    conn = () => client.connect(),
-    disconn = () => client.disconnect()
+const client = new Client({ server: 'http://localhost:9999/queues', generateID: generateObjectID });
+const sub = () => client.subscribe('topic1', ({ data }) => console.log(data));
+const unsub = () => client.unsubscribe('topic1');
+const pub = () => client.send('topic1', 'hello,world');
+const conn = () => client.connect();
+const disconn = () => client.disconnect();
 </script>
 
 <template>

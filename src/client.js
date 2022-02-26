@@ -1,7 +1,7 @@
 // https://tools.ietf.org/html/rfc8441
 
 import EventEmitter from 'eventemitter2';
-import SockJS from 'sockjs-client';
+import SockJS from 'sockjs-client/dist/sockjs.js'
 import { WebSocketMultiplex } from './multiplex.js';
 import { getApi, json, POST } from "es-fetch-api";
 
