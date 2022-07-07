@@ -1,9 +1,12 @@
 // https://tools.ietf.org/html/rfc8441
 
 import EventEmitter from 'eventemitter2';
-import SockJS from 'sockjs-client/dist/sockjs.js'
 import { WebSocketMultiplex } from './multiplex.js';
-import { getApi, json, POST } from "es-fetch-api";
+import { getApi } from "es-fetch-api";
+import { POST } from "es-fetch-api/middlewares/methods.js";
+import { json } from "es-fetch-api/middlewares/body.js";
+
+const SockJS = (await import( typeof process !== 'undefined' ? 'sockjs-client' : 'sockjs-client/dist/sockjs.js')).default
 
 export default class Client extends EventEmitter.EventEmitter2 {
     id
