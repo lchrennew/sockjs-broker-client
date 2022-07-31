@@ -1,3 +1,3 @@
 # sockjs-broker-client
-WebSocket Client for sockjs-broker
+WebSocket ClientBase for sockjs-broker
 

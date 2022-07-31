@@ -1,5 +1,5 @@
-import ClientBase from "./client-base.js";
-import SockJS from 'sockjs-client/dist/sockjs.min.js'
+import SockJS from 'sockjs-client'
+import ClientBase from './client-base.js'
 
 export default class Client extends ClientBase {
     constructor({ server, generateID, logger }) {

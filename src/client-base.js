@@ -5,15 +5,12 @@ import { WebSocketMultiplex } from './multiplex.js';
 import { getApi } from "es-fetch-api";
 import { POST } from "es-fetch-api/middlewares/methods.js";
 import { json } from "es-fetch-api/middlewares/body.js";
-import SockJS from 'sockjs-client/lib/entry.js'
 import { query } from "es-fetch-api/middlewares/query.js";
 
-if (typeof window !== 'undefined') {
-    window.global ??= {}
-}
-export default class Client extends EventEmitter.EventEmitter2 {
+export default class ClientBase extends EventEmitter.EventEmitter2 {
     id
     server;
+    #getSock;
     channels;
     sock;
     multiplexer;
@@ -27,6 +24,7 @@ export default class Client extends EventEmitter.EventEmitter2 {
      * @param server {String} Base URL of sockjs-broker
      * @param generateID {()=>String}
      * @param logger: {{info:(...args)=>{}, warn:(...args)=>{}}
+     * @param SockJS {Function}
      */
     constructor({
                     server,
@@ -34,17 +32,19 @@ export default class Client extends EventEmitter.EventEmitter2 {
                     logger = {
                         info: (...args) => console.log(...args),
                         warn: (...args) => console.warn(...args),
-                    }
+                    },
+                    SockJS,
                 }) {
         super();
         this.server = server;
         this.id = generateID()
         this.#logger = logger
+        this.#getSock = (...opts) => new SockJS(...opts)
     }
 
     async connect(onOpen) {
         if (this.opened) return;
-        const sock = new SockJS(`${this.server}/queues`, null, {
+        const sock = this.#getSock(`${this.server}/queues`, null, {
             server: this.id.substr(0, 12),
             sessionId: () => this.id.substr(12)
         });

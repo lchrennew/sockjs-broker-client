@@ -1,5 +1,5 @@
 <script setup>
-import Client from "sockjs-broker-client";
+import ClientBase from "sockjs-broker-client";
 import { generateObjectID } from "es-object-id";
 
 const client = new Client({ server: 'http://localhost:8081/queues', generateID: generateObjectID });
