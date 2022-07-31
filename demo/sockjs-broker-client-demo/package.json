@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "es-object-id": "^1.0.0",
-    "sockjs-broker-client": "^1.0.22",
+    "sockjs-broker-client": "1.0.12",
     "vue": "^3.2.37"
   },
   "devDependencies": {

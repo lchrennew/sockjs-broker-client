@@ -5,9 +5,12 @@ import { WebSocketMultiplex } from './multiplex.js';
 import { getApi } from "es-fetch-api";
 import { POST } from "es-fetch-api/middlewares/methods.js";
 import { json } from "es-fetch-api/middlewares/body.js";
+import SockJS from 'sockjs-client/lib/entry.js'
+import { query } from "es-fetch-api/middlewares/query.js";
 
-const SockJS = (await import( typeof process !== 'undefined' ? 'sockjs-client' : 'sockjs-client/dist/sockjs.js')).default
-
+if (typeof window !== 'undefined') {
+    window.global ??= {}
+}
 export default class Client extends EventEmitter.EventEmitter2 {
     id
     server;
@@ -41,7 +44,7 @@ export default class Client extends EventEmitter.EventEmitter2 {
 
     async connect(onOpen) {
         if (this.opened) return;
-        const sock = new SockJS(this.server, null, {
+        const sock = new SockJS(`${this.server}/queues`, null, {
             server: this.id.substr(0, 12),
             sessionId: () => this.id.substr(12)
         });
@@ -122,7 +125,7 @@ export default class Client extends EventEmitter.EventEmitter2 {
 
     async publish(topic, message) {
         const api = getApi(this.server)
-        await api(`publish/${encodeURIComponent(topic)}`, POST, json(message)).catch(() => null)
+        await api(`publish`, POST, query({ topic }), json(message)).catch(() => null)
     }
 }
 
