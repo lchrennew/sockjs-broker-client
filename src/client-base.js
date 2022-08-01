@@ -127,5 +127,19 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         const api = getApi(this.server)
         await api(`publish`, POST, query({ topic }), json(message)).catch(() => null)
     }
+
+    async checkChannel(topic) {
+        const api = getApi(this.server)
+        return await api(`channels/exists`, query({ topic }))
+            .then(response => response.json())
+            .catch(() => false)
+    }
+
+    async getChannels() {
+        const api = getApi(this.server)
+        return await api(`channels`)
+            .then(response => response.json())
+            .catch(() => false)
+    }
 }
 
