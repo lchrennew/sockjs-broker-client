@@ -39,16 +39,14 @@ export class Channel extends DumbEventTarget {
         }
     }
 
-    send(data) {
-        this.ws.send('msg,' + this.name + ',' + data);
-    }
-
     close() {
         this.ws.send('uns,' + this.name);
         delete this.channels[this.name];
         setTimeout(() => this.emit('close', {}), 0);
     }
 }
+
+export const send = (ws, topic, message) => ws.send('msg,' + topic + ',' + message);
 
 export class WebSocketMultiplex {
     constructor(ws) {
@@ -68,7 +66,7 @@ export class WebSocketMultiplex {
                     sub.emit('close', {});
                     break;
                 case 'msg':
-                    sub.emit('message', {data: payload});
+                    sub.emit('message', { data: payload });
                     break;
             }
         });

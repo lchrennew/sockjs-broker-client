@@ -1,7 +1,7 @@
 // https://tools.ietf.org/html/rfc8441
 
 import EventEmitter from 'eventemitter2';
-import { WebSocketMultiplex } from './multiplex.js';
+import { send, WebSocketMultiplex } from './multiplex.js';
 import { getApi } from "es-fetch-api";
 import { POST } from "es-fetch-api/middlewares/methods.js";
 import { json } from "es-fetch-api/middlewares/body.js";
@@ -93,6 +93,26 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         return channel;
     }
 
+    async subscribePromisified(topic, receive) {
+        this.#createFallback(topic, receive)
+        if (!this.opened) return;
+        let channel = this.channels[topic];
+        if (!channel) {
+            return new Promise(resolve => {
+                channel = this.multiplexer.channel(topic);
+                channel.onopen = () => {
+                    this.#logger.info(`channel ${topic} opened`);
+                    resolve(channel)
+                }
+                channel.onmessage = receive;
+                channel.onclose = () => this.#logger.info(`channel ${topic} closed`);
+                this.channels[topic] = channel;
+            })
+
+        }
+        return channel;
+    }
+
     unsubscribe(topic) {
         this.#removeFallback(topic)
         if (!this.opened) return;
@@ -103,13 +123,22 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         }
     }
 
-    send(topic, message) {
+    unsubscribePromisified(topic) {
+        this.#removeFallback(topic)
         if (!this.opened) return;
         let channel = this.channels[topic];
-        if (!channel) {
-            return this.#logger.warn('You should subscribe this topic first');
+        if (channel) {
+            return new Promise(resolve => {
+                channel.on('closed', () => resolve(channel))
+                channel.close();
+                delete this.channels[topic];
+            })
         }
-        channel.send(message)
+    }
+
+    send(topic, message) {
+        if (!this.opened) return;
+        send(this.sock, topic, message)
     }
 
     #createFallback(topic, receive) {
@@ -125,7 +154,7 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
 
     async publish(topic, message) {
         const api = getApi(this.server)
-        await api(`publish`, POST, query({ topic }), json(message)).catch(() => null)
+        return api(`publish`, POST, query({ topic }), json(message))
     }
 
     async checkChannel(topic) {
