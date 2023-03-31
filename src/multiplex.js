@@ -1,23 +1,29 @@
 class DumbEventTarget {
+    #listeners;
+
     constructor() {
-        this._listeners = {};
+        this.#listeners = {};
     }
 
-    _ensure(type) {
-        if (!(type in this._listeners)) this._listeners[type] = [];
+    #ensure(type) {
+        this.#listeners[type] ??= [];
     }
 
     addEventListener(type, listener) {
-        this._ensure(type);
-        this._listeners[type].push(listener);
+        this.#ensure(type);
+        this.#listeners[type].push(listener);
+    }
+
+    on(type, listener) {
+        this.addEventListener(type, listener)
     }
 
     emit(type) {
-        this._ensure(type);
+        this.#ensure(type);
         const args = Array.prototype.slice.call(arguments, 1);
-        if (this['on' + type]) this['on' + type].apply(this, args);
-        for (let i = 0; i < this._listeners[type].length; i++) {
-            this._listeners[type][i].apply(this, args);
+        this[`on${ type }`]?.apply(this, args);
+        for (const listener of this.#listeners[type]) {
+            listener.apply(this, args);
         }
     }
 }
@@ -28,19 +34,24 @@ export class Channel extends DumbEventTarget {
         this.ws = ws;
         this.name = name;
         this.channels = channels;
-        const onopen = () => {
-            this.ws.send('sub,' + this.name);
-            this.emit('open');
-        };
+
         if (ws.readyState > 0) {
-            setTimeout(onopen, 0);
+            setTimeout(this.open, 0);
         } else {
-            this.ws.addEventListener('open', onopen);
+            ws.addEventListener('open', this.open);
         }
     }
 
+    open() {
+        this.ws.send('sub,' + this.name);
+        this.emit('open');
+    }
+
     close() {
-        this.ws.send('uns,' + this.name);
+        this.ws.removeListener('open', this.open);
+        if (this.ws.readyState > 0)
+            this.ws.send('uns,' + this.name);
+
         delete this.channels[this.name];
         setTimeout(() => this.emit('close', {}), 0);
     }
@@ -72,8 +83,10 @@ export class WebSocketMultiplex {
         });
     }
 
-    channel(raw_name) {
-        return this.channels[escape(raw_name)] =
-            new Channel(this.ws, escape(raw_name), this.channels);
+    channel(name, options) {
+        const { autoCreate = true } = options ?? {}
+        if (autoCreate)
+            return this.channels[name] ??= new Channel(this.ws, name, this.channels);
+        else return this.channels[name]
     }
 }

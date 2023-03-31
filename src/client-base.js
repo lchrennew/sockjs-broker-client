@@ -16,7 +16,6 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
     multiplexer;
     retries = 0;
     opened = false;
-    #fallbacks = {}
     #logger
 
     /**
@@ -40,11 +39,12 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         this.id = generateID()
         this.#logger = logger
         this.#getSock = (...opts) => new SockJS(...opts)
+        this.setMaxListeners(0)
     }
 
     async connect(onOpen) {
         if (this.opened) return;
-        const sock = this.#getSock(`${this.server}/queues`, null, {
+        const sock = this.#getSock(`${ this.server }/queues`, null, {
             server: this.id.substr(0, 12),
             sessionId: () => this.id.substr(12)
         });
@@ -52,7 +52,7 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         this.multiplexer = new WebSocketMultiplex(this.sock);
         this.channels = {};
         sock.onclose = (e) => {
-            this.#logger.info(`Connection closed: ${e.reason} (${e.code}).`);
+            this.#logger.info(`Connection closed: ${ e.reason } (${ e.code }).`);
             this.opened = false;
             delete this.sock;
             delete this.multiplexer;
@@ -79,77 +79,45 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         this.channels = {};
     }
 
+    /**
+     * 订阅主题
+     * @param topic
+     * @param receive
+     * @returns {Channel|*}
+     */
     subscribe(topic, receive) {
-        this.#createFallback(topic, receive)
-        if (!this.opened) return;
-        let channel = this.channels[topic];
-        if (!channel) {
-            channel = this.multiplexer.channel(topic);
-            channel.onopen = () => this.#logger.info(`channel ${topic} opened`);
-            channel.onmessage = receive;
-            channel.onclose = () => this.#logger.info(`channel ${topic} closed`);
-            this.channels[topic] = channel;
-        }
-        return channel;
+        // 添加本地事件订阅
+        this.removeAllListeners(topic)
+        this.on(topic, receive)
+
+        // 注册远程订阅
+        return this.#registerChannel(topic)
     }
 
-    async subscribePromisified(topic, receive) {
-        this.#createFallback(topic, receive)
-        if (!this.opened) return;
-        let channel = this.channels[topic];
-        if (!channel) {
-            return new Promise(resolve => {
-                channel = this.multiplexer.channel(topic);
-                channel.onopen = () => {
-                    this.#logger.info(`channel ${topic} opened`);
-                    resolve(channel)
-                }
-                channel.onmessage = receive;
-                channel.onclose = () => this.#logger.info(`channel ${topic} closed`);
-                this.channels[topic] = channel;
-            })
-
-        }
+    /**
+     * 注册远程订阅，并避免重复订阅
+     * @param topic
+     * @returns {Channel|*}
+     */
+    #registerChannel(topic) {
+        let channel = this.channels[topic] ??= this.multiplexer.channel(topic);
+        channel.onopen = () => this.#logger.info(`channel ${ topic } opened`);
+        channel.onmessage = (topic, payload) => this.emit(topic, payload);
+        channel.onclose = () => this.#logger.info(`channel ${ topic } closed`);
         return channel;
     }
 
     unsubscribe(topic) {
-        this.#removeFallback(topic)
-        if (!this.opened) return;
-        let channel = this.channels[topic];
-        if (channel) {
-            channel.close();
-            delete this.channels[topic];
-        }
-    }
-
-    unsubscribePromisified(topic) {
-        this.#removeFallback(topic)
-        if (!this.opened) return;
-        let channel = this.channels[topic];
-        if (channel) {
-            return new Promise(resolve => {
-                channel.on('closed', () => resolve(channel))
-                channel.close();
-                delete this.channels[topic];
-            })
-        }
+        // 注销远程通道
+        this.channels[topic]?.close();
+        delete this.channels[topic];
+        // 注销本地事件
+        this.removeAllListeners(topic)
     }
 
     send(topic, message) {
         if (!this.opened) return;
         send(this.sock, topic, message)
-    }
-
-    #createFallback(topic, receive) {
-        this.#removeFallback(topic)
-        this.once('connected', this.#fallbacks[topic] = () => this.subscribe(topic, receive))
-    }
-
-    #removeFallback(topic) {
-        const exists = this.#fallbacks[topic]
-        exists && this.off('connected', exists)
-        delete this.#fallbacks[topic]
     }
 
     async publish(topic, message) {
