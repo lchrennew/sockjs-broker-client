@@ -1,3 +1,5 @@
+import { CONNECTING, OPEN } from "./client-base.js";
+
 class DumbEventTarget {
     #listeners;
 
@@ -29,64 +31,101 @@ class DumbEventTarget {
 }
 
 export class Channel extends DumbEventTarget {
-    constructor(ws, name, channels) {
-        super();
-        this.ws = ws;
-        this.name = name;
-        this.channels = channels;
+    name;
 
-        if (ws.readyState > 0) {
-            setTimeout(this.open, 0);
-        } else {
-            ws.addEventListener('open', this.open);
+    #handler;
+
+    constructor(name) {
+        super();
+        this.name = name;
+        this.open = this.open.bind(this)
+        this.close = this.close.bind(this)
+
+    }
+
+    open(ws) {
+        if (ws && !this.#handler) {
+            this.#handler = () => {
+                ws.send(`sub,${ this.name }`);
+                this.emit('open');
+            };
+
+            if (ws.readyState === OPEN) {
+                setTimeout(this.#handler, 0);
+            } else if (ws.readyState === CONNECTING) {
+                ws.addEventListener('open', this.#handler);
+            }
         }
     }
 
-    open() {
-        this.ws.send('sub,' + this.name);
-        this.emit('open');
-    }
-
-    close() {
-        this.ws.removeListener('open', this.open);
-        if (this.ws.readyState > 0)
-            this.ws.send('uns,' + this.name);
-
-        delete this.channels[this.name];
-        setTimeout(() => this.emit('close', {}), 0);
+    close(ws) {
+        if (this.#handler && ws) {
+            ws.removeEventListener('open', this.#handler);
+            this.#handler = null
+            if (ws.readyState === OPEN)
+                ws.send(`uns,${ this.name }`);
+            else if (ws.readyState === CONNECTING) {
+                ws.addEventListener('open', () => ws.send(`uns,${ this.name }`));
+            }
+            setTimeout(() => this.emit('close', {}), 0);
+        }
     }
 }
 
-export const send = (ws, topic, message) => ws.send('msg,' + topic + ',' + message);
+export const send = (ws, topic, message) => ws.send(`msg,${ topic },${ message }`);
 
 export class WebSocketMultiplex {
-    constructor(ws) {
-        this.ws = ws;
-        this.channels = {};
-        this.ws.addEventListener('message', e => {
+    #channels = {};
+
+    #handler
+
+    constructor() {
+        this.#handler = e => {
             const t = e.data.split(',');
             const type = t.shift(), name = t.shift(), payload = t.join();
-            if (!(name in this.channels)) {
+            if (!(name in this.#channels)) {
                 return;
             }
-            const sub = this.channels[name];
+            const sub = this.#channels[name];
 
             switch (type) {
                 case 'uns':
-                    delete this.channels[name];
+                    delete this.#channels[name];
                     sub.emit('close', {});
                     break;
                 case 'msg':
                     sub.emit('message', { data: payload });
                     break;
             }
-        });
+        }
+    }
+
+    install(ws) {
+        ws.addEventListener('message', this.#handler);
+        for (const name in this.#channels) {
+            this.#channels[name].open(ws)
+        }
+    }
+
+    uninstall(ws) {
+        ws.removeEventListener('message', this.#handler)
+        for (const name in this.#channels) {
+            this.#channels[name].close(ws)
+        }
     }
 
     channel(name, options) {
         const { autoCreate = true } = options ?? {}
         if (autoCreate)
-            return this.channels[name] ??= new Channel(this.ws, name, this.channels);
-        else return this.channels[name]
+            return this.#channels[name] ??= new Channel(name);
+        else return this.#channels[name]
+    }
+
+    closeChannel(name, ws) {
+        const channel = this.#channels[name]
+        if (channel) {
+            delete this.#channels[name]
+            channel.close(ws)
+        }
     }
 }

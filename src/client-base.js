@@ -7,15 +7,17 @@ import { POST } from "es-fetch-api/middlewares/methods.js";
 import { json } from "es-fetch-api/middlewares/body.js";
 import { query } from "es-fetch-api/middlewares/query.js";
 
+export const CONNECTING = 0;
+export const OPEN = 1;
+export const CLOSING = 2;
+export const CLOSED = 3;
+
 export default class ClientBase extends EventEmitter.EventEmitter2 {
     id
-    server;
+    #server;
     #getSock;
-    channels;
-    sock;
-    multiplexer;
-    retries = 0;
-    opened = false;
+    #sock;
+    #multiplexer = new WebSocketMultiplex();
     #logger
 
     /**
@@ -35,48 +37,49 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
                     SockJS,
                 }) {
         super();
-        this.server = server;
         this.id = generateID()
+        this.#server = server;
         this.#logger = logger
         this.#getSock = (...opts) => new SockJS(...opts)
         this.setMaxListeners(0)
     }
 
-    async connect(onOpen) {
-        if (this.opened) return;
-        const sock = this.#getSock(`${ this.server }/queues`, null, {
+
+    get #connectable() {
+        return ![ CONNECTING, OPEN ].includes(this.#sock?.readyState)
+    }
+
+    get #opened() {
+        return [ OPEN ].includes(this.#sock?.readyState)
+    }
+
+    async connect() {
+        if (!this.#connectable) return;
+
+        this.#sock = this.#getSock(`${ this.#server }/queues`, null, {
             server: this.id.substr(0, 12),
             sessionId: () => this.id.substr(12)
         });
-        this.sock = sock;
-        this.multiplexer = new WebSocketMultiplex(this.sock);
-        this.channels = {};
-        sock.onclose = (e) => {
+
+
+        this.#sock.onclose = e => {
             this.#logger.info(`Connection closed: ${ e.reason } (${ e.code }).`);
-            this.opened = false;
-            delete this.sock;
-            delete this.multiplexer;
+            this.#multiplexer.uninstall(this.#sock)
             if (e.code !== 1000) {
                 this.#logger.info('Reconnecting.');
                 setTimeout(() => this.connect(), 3000)
             }
         };
 
-        return new Promise(resolve => {
-            sock.onopen = () => {
-                this.#logger.info('Connection opened.');
-                this.opened = true;
-                this.retries = 0;
-                onOpen?.()
-                this.emit('connected')
-                resolve(this)
-            };
-        })
+        this.#sock.onopen = () => {
+            this.#logger.info('Connection opened.');
+            this.#multiplexer.install(this.#sock);
+            this.emit('connected')
+        };
     }
 
     disconnect() {
-        this.sock?.close();
-        this.channels = {};
+        this.#sock?.close();
     }
 
     /**
@@ -100,40 +103,40 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
      * @returns {Channel|*}
      */
     #registerChannel(topic) {
-        let channel = this.channels[topic] ??= this.multiplexer.channel(topic);
+        let channel = this.#multiplexer.channel(topic);
         channel.onopen = () => this.#logger.info(`channel ${ topic } opened`);
-        channel.onmessage = (topic, payload) => this.emit(topic, payload);
+        channel.onmessage = payload => this.emit(topic, payload);
         channel.onclose = () => this.#logger.info(`channel ${ topic } closed`);
+        channel.open(this.#sock)
         return channel;
     }
 
     unsubscribe(topic) {
         // 注销远程通道
-        this.channels[topic]?.close();
-        delete this.channels[topic];
+        this.#multiplexer.closeChannel(topic, this.#sock);
         // 注销本地事件
         this.removeAllListeners(topic)
     }
 
     send(topic, message) {
-        if (!this.opened) return;
-        send(this.sock, topic, message)
+        if (!this.#opened) return;
+        send(this.#sock, topic, message)
     }
 
     async publish(topic, message) {
-        const api = getApi(this.server)
+        const api = getApi(this.#server)
         return api(`publish`, POST, query({ topic }), json(message))
     }
 
     async checkChannel(topic) {
-        const api = getApi(this.server)
+        const api = getApi(this.#server)
         return await api(`channels/exists`, query({ topic }))
             .then(response => response.json())
             .catch(() => false)
     }
 
     async getChannels() {
-        const api = getApi(this.server)
+        const api = getApi(this.#server)
         return await api(`channels`)
             .then(response => response.json())
             .then(({ exists }) => exists)
