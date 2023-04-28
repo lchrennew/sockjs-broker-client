@@ -19,6 +19,7 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
     #sock;
     #multiplexer = new WebSocketMultiplex();
     #logger
+    #offlineQueue = []
 
     /**
      *
@@ -42,6 +43,12 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         this.#logger = logger
         this.#getSock = (...opts) => new SockJS(...opts)
         this.setMaxListeners(0)
+        this.on('connected', () => {
+            while (this.#offlineQueue.length){
+                const {topic, message} = this.#offlineQueue.pop()
+                this.send(topic, message)
+            }
+        })
     }
 
 
@@ -119,7 +126,10 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
     }
 
     send(topic, message) {
-        if (!this.#opened) return;
+        if (!this.#opened) {
+            this.#offlineQueue.push({ topic, message });
+            return;
+        }
         send(this.#sock, topic, message)
     }
 
