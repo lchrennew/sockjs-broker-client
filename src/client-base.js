@@ -44,8 +44,9 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
         this.#getSock = (...opts) => new SockJS(...opts)
         this.setMaxListeners(0)
         this.on('connected', () => {
-            while (this.#offlineQueue.length){
-                const {topic, message} = this.#offlineQueue.pop()
+            while (this.#offlineQueue.length) {
+                const { topic, message } = this.#offlineQueue.shift()
+                this.#logger.info('发送离线消息', topic, message)
                 this.send(topic, message)
             }
         })
@@ -127,6 +128,7 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
 
     send(topic, message) {
         if (!this.#opened) {
+            this.#logger.info('记录离线消息', topic, message)
             this.#offlineQueue.push({ topic, message });
             return;
         }
