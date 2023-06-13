@@ -66,7 +66,8 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
 
         this.#sock = this.#getSock(`${ this.#server }/queues`, null, {
             server: this.id.substr(0, 12),
-            sessionId: () => this.id.substr(12)
+            sessionId: () => this.id.substr(12),
+            transports: 'websocket',
         });
 
 
