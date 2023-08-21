@@ -72,10 +72,10 @@ export default class ClientBase extends EventEmitter.EventEmitter2 {
 
 
         this.#sock.onclose = e => {
-            this.#logger.info(`Connection closed: ${ e.reason } (${ e.code }).`);
+            this.#logger.info(`Connection closed: ${ e.reason } (${ e.code }).`, this.#server);
             this.#multiplexer.uninstall(this.#sock)
             if (e.code !== 1000) {
-                this.#logger.info('Reconnecting.');
+                this.#logger.info('Reconnecting.', this.#server);
                 setTimeout(() => this.connect(), 3000)
             }
         };
